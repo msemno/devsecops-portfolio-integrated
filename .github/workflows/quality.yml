@@ -25,7 +25,7 @@ jobs:
       - name: Run application and security regression tests
         run: python -m pytest -q
       - name: Python syntax and correctness lint
-        run: ruff check --select E9,F63,F7,F82 service labsec tests
+        run: ruff check service labsec tests
       - name: Positive policy fixtures
         run: make policy
       - name: Negative policy fixtures must be rejected
