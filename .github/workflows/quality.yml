@@ -1,0 +1,104 @@
+name: Quality and security gates
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  unit-and-baseline-policy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+          cache: pip
+      - run: python -m pip install --upgrade pip && python -m pip install -r requirements-dev.txt
+      - name: Run application and security regression tests
+        run: python -m pytest -q
+      - name: Python syntax and correctness lint
+        run: ruff check --select E9,F63,F7,F82 service labsec tests
+      - name: Positive policy fixtures
+        run: make policy
+      - name: Negative policy fixtures must be rejected
+        run: make policy-negative
+      - name: Audit Python dependencies (fail on known published advisories)
+        run: pip-audit --requirement requirements.txt
+  policy-as-code:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Install verified Conftest release
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=0.71.1
+          ASSET="conftest_${VERSION}_Linux_x86_64.tar.gz"
+          URL="https://github.com/open-policy-agent/conftest/releases/download/v${VERSION}"
+          curl -fLsS -o "/tmp/${ASSET}" "${URL}/${ASSET}"
+          curl -fLsS -o /tmp/conftest-checksums.txt "${URL}/checksums.txt"
+          (cd /tmp; grep " ${ASSET}$" conftest-checksums.txt | sha256sum -c -)
+          mkdir -p /tmp/conftest-install
+          tar -xzf "/tmp/${ASSET}" -C /tmp/conftest-install
+          sudo install -m 0755 /tmp/conftest-install/conftest /usr/local/bin/conftest
+      - name: Rego Kubernetes positive controls
+        run: conftest test --policy policy/kubernetes k8s/base/deployment.yaml
+      - name: Rego Terraform positive controls
+        run: conftest test --policy policy/terraform fixtures/terraform/secure-plan.json
+      - name: "Rego negative control: bad Kubernetes must fail"
+        run: |
+          if conftest test --policy policy/kubernetes k8s/fixtures/bad-deployment.yaml; then exit 1; fi
+      - name: "Rego negative control: public SSH must fail"
+        run: |
+          if conftest test --policy policy/terraform fixtures/terraform/insecure-plan.json; then exit 1; fi
+  configuration-scanning:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: config
+          scan-ref: iac/terraform/aws
+          exit-code: '1'
+          severity: HIGH,CRITICAL
+      - uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: config
+          scan-ref: k8s/base
+          exit-code: '1'
+          severity: HIGH,CRITICAL
+      - uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: secret
+          exit-code: '1'
+  container-image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Build local image (no registry write privileges)
+        run: docker build --file docker/Dockerfile --tag devsecops-demo:ci .
+      - uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: devsecops-demo:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'

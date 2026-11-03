@@ -1,0 +1,21 @@
+# Verified primary references — reviewed October 2026
+
+- GitHub attestation permissions and supported plans: https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations
+- GitHub attest action and subject binding: https://github.com/actions/attest
+- SLSA build levels: https://slsa.dev/spec/v1.0/levels
+- Sigstore CI: https://docs.sigstore.dev/quickstart/quickstart-ci/
+- Cosign blob identity verification: https://github.com/sigstore/cosign/blob/main/doc/cosign_verify-blob.md
+- Cosign installer: https://github.com/sigstore/cosign-installer
+- Syft: https://github.com/anchore/syft
+- Anchore SBOM Action: https://github.com/anchore/sbom-action
+- Trivy IaC scanner: https://trivy.dev/docs/latest/scanner/misconfiguration/
+- Trivy Action: https://github.com/aquasecurity/trivy-action
+- Conftest: https://www.conftest.dev/install/
+- Kubernetes Pod Security Standards: https://kubernetes.io/docs/concepts/security/pod-security-standards/
+- Kubernetes kind: https://kind.sigs.k8s.io/docs/user/quick-start/
+- Official kubectl install: https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/
+- HashiCorp Terraform install: https://developer.hashicorp.com/terraform/install
+- pip-audit: https://github.com/pypa/pip-audit
+- CodeQL Action: https://github.com/github/codeql-action
+- NIST SSDF: https://csrc.nist.gov/pubs/sp/800/218/final
+- OpenSSF Scorecard: https://github.com/ossf/scorecard

@@ -1,0 +1,80 @@
+name: Signed and attested source release
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  release:
+    # Only intended repository executions get mintable OIDC identities.
+    if: github.event.repository.fork == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Regression tests must pass before attestations
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pytest -q
+          make policy
+          make policy-negative
+      - name: Build deterministic archive from committed source
+        run: |
+          mkdir -p dist
+          git archive --format=tar HEAD | gzip -n > dist/devsecops-source.tar.gz
+          sha256sum dist/devsecops-source.tar.gz > dist/checksums.sha256
+      - name: Generate SPDX JSON SBOM for repository
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: dist/sbom.spdx.json
+          artifact-name: portfolio-sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Validate generated SBOM
+        run: python -m labsec.cli validate-sbom dist/sbom.spdx.json
+      - name: Attest archive build provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/devsecops-source.tar.gz
+      - name: Attest SBOM against same archive
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/devsecops-source.tar.gz
+          sbom-path: dist/sbom.spdx.json
+      - uses: sigstore/cosign-installer@v4.1.0
+      - name: Keyless sign source blob with GitHub OIDC
+        run: |
+          cosign sign-blob --yes --bundle dist/source.sigstore.json dist/devsecops-source.tar.gz
+      - name: Verify signer identity before publishing
+        env:
+          CERT_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/release.yml@${{ github.ref }}
+        run: |
+          cosign verify-blob --bundle dist/source.sigstore.json \
+            --certificate-identity "$CERT_IDENTITY" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            dist/devsecops-source.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-source-and-sbom
+          path: |
+            dist/devsecops-source.tar.gz
+            dist/checksums.sha256
+            dist/sbom.spdx.json
+            dist/source.sigstore.json
+          if-no-files-found: error
+          retention-days: 30

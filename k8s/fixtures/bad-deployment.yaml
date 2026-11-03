@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: deliberately-bad}
+spec:
+  selector: {matchLabels: {app: deliberately-bad}}
+  template:
+    metadata: {labels: {app: deliberately-bad}}
+    spec:
+      hostNetwork: true
+      automountServiceAccountToken: true
+      containers:
+        - name: api
+          image: nginx:latest
+          securityContext:
+            allowPrivilegeEscalation: true
+            privileged: true
+          resources: {}
