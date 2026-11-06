@@ -16,11 +16,7 @@ resource "aws_security_group" "app" {
     protocol    = "tcp"
     cidr_blocks = [var.allowed_ingress_cidr]
   }
-  egress {
-    description = "HTTPS updates"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+  # Design-only: deny all outbound connections by default.
+  # Explicit outbound destinations require separate security review.
+  egress = []
 }
