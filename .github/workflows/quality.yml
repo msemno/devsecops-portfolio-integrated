@@ -71,18 +71,21 @@ jobs:
           persist-credentials: false
       - uses: aquasecurity/trivy-action@v0.36.0
         with:
+          version: v0.76.1
           scan-type: config
           scan-ref: iac/terraform/aws
           exit-code: '1'
           severity: HIGH,CRITICAL
       - uses: aquasecurity/trivy-action@v0.36.0
         with:
+          version: v0.76.1
           scan-type: config
           scan-ref: k8s/base
           exit-code: '1'
           severity: HIGH,CRITICAL
       - uses: aquasecurity/trivy-action@v0.36.0
         with:
+          version: v0.76.1
           scan-type: fs
           scan-ref: .
           scanners: secret
