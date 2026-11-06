@@ -96,9 +96,78 @@ jobs:
           persist-credentials: false
       - name: Build local image (no registry write privileges)
         run: docker build --file docker/Dockerfile --tag devsecops-demo:ci .
-      - uses: aquasecurity/trivy-action@v0.36.0
+      - name: Generate complete image vulnerability report
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
+          scan-type: image
           image-ref: devsecops-demo:ci
+          version: v0.76.1
+          scanners: vuln
+          format: json
+          output: trivy-image-report.json
+          ignore-unfixed: 'false'
+          exit-code: '0'
+
+      - name: Upload complete vulnerability evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-vulnerability-report
+          path: trivy-image-report.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Disclose remaining HIGH and CRITICAL findings
+        shell: bash
+        run: |
+          python3 - <<'SCANPY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads(Path("trivy-image-report.json").read_text())
+          findings = [
+              vuln
+              for result in report.get("Results", [])
+              for vuln in result.get("Vulnerabilities") or []
+          ]
+
+          high = [
+              vuln for vuln in findings
+              if vuln.get("Severity") in ("HIGH", "CRITICAL")
+          ]
+          without_fix = [
+              vuln for vuln in high
+              if not vuln.get("FixedVersion")
+          ]
+
+          summary = (
+              "### Container vulnerability assessment\n"
+              f"- Total findings: {len(findings)}\n"
+              f"- HIGH/CRITICAL records: {len(high)}\n"
+              f"- HIGH/CRITICAL without listed fixes: {len(without_fix)}\n"
+              "- Risk acceptance: NOT GRANTED\n"
+          )
+
+          print(summary)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as output:
+              output.write(summary)
+
+          if without_fix:
+              print(
+                  "::warning title=Open container security risks::"
+                  f"{len(without_fix)} HIGH/CRITICAL records "
+                  "have no listed fix. Review required."
+              )
+          SCANPY
+
+      - name: Enforce fixable HIGH and CRITICAL vulnerability gate
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: devsecops-demo:ci
+          version: v0.76.1
+          scanners: vuln
           severity: HIGH,CRITICAL
-          ignore-unfixed: true
+          ignore-unfixed: 'true'
           exit-code: '1'
+          skip-setup-trivy: true
